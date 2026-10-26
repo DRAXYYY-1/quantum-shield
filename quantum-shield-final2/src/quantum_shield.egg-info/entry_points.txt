@@ -1,0 +1,7 @@
+[console_scripts]
+qs = quantum_shield.cli:main
+qs-benchmark = quantum_shield.benchmark:main
+qs-client = quantum_shield.storage.client:main
+qs-distribute = quantum_shield.distribution_cli:main
+qs-files = quantum_shield.file_cli:main
+qs-worker = quantum_shield.storage.worker:main

@@ -1,0 +1,22 @@
+{
+  "nodes": [
+    {
+      "id": "worker-a",
+      "host": "192.0.2.10",
+      "port": 9999,
+      "server_name": "qs-worker-a.local",
+      "ca": "certs/ca.crt",
+      "cert": "certs/client.crt",
+      "key": "certs/client.key"
+    },
+    {
+      "id": "worker-b",
+      "host": "192.0.2.11",
+      "port": 9999,
+      "server_name": "qs-worker-b.local",
+      "ca": "certs/ca.crt",
+      "cert": "certs/client.crt",
+      "key": "certs/client.key"
+    }
+  ]
+}

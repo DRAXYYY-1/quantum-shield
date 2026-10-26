@@ -1,0 +1,118 @@
+# Quantum-Shield — Unified Research Prototype
+
+This repository combines the code from milestones M1–M6 into one installable Python project:
+
+- **M1:** ML-KEM-768 + HKDF-SHA256 + AES-256-GCM crypto helpers and `qs crypto-check`.
+- **M2:** bounded shard storage worker, safe shard IDs, atomic storage and SHA-256 validation.
+- **M3:** mutual-TLS client/worker transport.
+- **M4:** ordered chunk distribution and reconstruction using a JSON worker configuration and manifest.
+- **M5:** replicated chunk placement and replica fallback during reconstruction.
+- **M6:** local in-memory benchmark with CSV/JSON output.
+
+## Important scope and security limits
+
+This is a **research prototype, not production-ready storage software**. The `qs-files` menu now connects M1 encryption to the M4/M5 distribution path: before sending, it encrypts the complete file into an ML-KEM-768 + HKDF-SHA256 + AES-256-GCM envelope; storage workers receive chunks of that encrypted envelope. Retrieval fetches and integrity-checks the chunks, reconstructs the envelope, and then authenticates/decrypts it locally.
+
+On first use, the menu creates a local ML-KEM private identity at `~/.config/quantum-shield/identity.mlkem768` (or the path set by `QS_IDENTITY_KEY`). On POSIX systems, the file is created with owner-only permissions. **The key is not password-encrypted.** Keep it protected and back it up securely; losing it means files encrypted to that identity cannot be decrypted. Retrieval on another computer will only work if you securely provision the same private identity there. Do not email or commit private keys.
+
+This remains a research prototype. Use non-sensitive test files only until key provisioning/recovery, authorization, manifest authentication, resource limits, and independent security review are complete. TLS protects traffic in transit; application-level encryption protects stored chunk contents, but does not prevent traffic analysis, compromised endpoints, malicious workers from deleting data, or unsafe handling of the local identity key. Ordered chunks are not secret sharing or erasure coding; replication does not yet automatically repair missing replicas; manifests need trusted backup/protection; the benchmark is in-memory and is not a LAN/TLS throughput benchmark.
+
+## Requirements
+
+- Python 3.12 or newer.
+- `cryptography >= 47.0.0` for the ML-KEM API used by M1.
+- OpenSSL CLI for TLS certificate tests (TLS tests skip if OpenSSL is unavailable).
+
+## Install and run tests
+
+From the repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[test]'
+pytest -q
+```
+
+Run the M1 crypto self-test:
+
+```bash
+qs crypto-check
+```
+
+This uses an in-memory ML-KEM keypair and does not save keys.
+
+## CLI commands
+
+```bash
+qs-worker --help
+qs-client --help
+qs-distribute --help
+qs-files
+qs-benchmark --help
+```
+
+### M2 worker safety
+
+The worker's default configuration is loopback-only. Do not expose it to a LAN or the public internet until TLS is correctly configured, access controls/firewall rules are reviewed, and a security review is complete. Do not disable certificate verification to make a connection work.
+
+### M3 TLS
+
+Use the certificate instructions in the TLS/worker code and tests. The server requires a trusted client certificate, and the client verifies the server certificate and hostname. Use test certificates only for local tests; create and protect real certificates appropriately for any multi-device experiment.
+
+### M4/M5 distribution
+
+The distribution CLI expects a `nodes.json` file containing each worker's ID, host, port, TLS server name, CA certificate path, client certificate path, and client private key path. Start by copying `nodes.json.example` to `nodes.json`, then edit the hostnames/IPs and certificate paths for your own lab. The example uses documentation-only IP addresses and will not connect until configured. TLS file paths are resolved relative to the configuration file. The distribution command writes a manifest; keep it backed up and do not trust a manifest received from an untrusted source.
+
+Use the interactive menu `qs-files` to choose **Send a file (encrypt + distribute)**, **Retrieve a file (verify + decrypt)**, or **Exit**. The menu stores encrypted envelopes on workers and decrypts only after retrieval, using the local identity key described above. The lower-level `qs-distribute` command remains a raw chunk distribution utility and does not automatically apply M1 encryption. For direct commands, use `qs-distribute send FILE --nodes nodes.json --manifest manifests/FILE.manifest.json` and `qs-distribute retrieve --manifest manifests/FILE.manifest.json --nodes nodes.json --output restored-FILE`. The `put` and `get` names remain supported as aliases. Send stores a recovery manifest locally; retrieval needs that manifest and access to the configured nodes.
+
+Example `nodes.json` shape (replace all example values with your own lab configuration):
+
+```json
+{
+  "nodes": [
+    {
+      "id": "worker-a",
+      "host": "192.168.1.50",
+      "port": 9999,
+      "server_name": "qs-worker-a.local",
+      "ca": "certs/ca.crt",
+      "cert": "certs/client.crt",
+      "key": "certs/client.key"
+    },
+    {
+      "id": "worker-b",
+      "host": "192.168.1.51",
+      "port": 9999,
+      "server_name": "qs-worker-b.local",
+      "ca": "certs/ca.crt",
+      "cert": "certs/client.crt",
+      "key": "certs/client.key"
+    }
+  ]
+}
+```
+
+This example is only a configuration shape; it does not create certificates or start a worker.
+
+### M6 local benchmark
+
+```bash
+qs-benchmark --sizes-mib 1 10 --chunk-kib 256 1024 4096 --replicas 2 --repeats 3 --output m6-benchmark.csv
+```
+
+The benchmark creates in-memory bytes, chunks and hashes them, reconstructs them, verifies integrity, and estimates replication storage. It does not measure TLS/network/disk throughput or run the distribution workflow.
+
+## Git hygiene
+
+Never commit real private keys, certificates containing sensitive information, `.env` files, or real node configuration. The `.gitignore` excludes common secret and local-development files. Review `git status` before pushing.
+
+## Research next steps
+
+1. Design secure identity provisioning and recovery for multiple client devices.
+2. Add per-client authorization and manifest authentication/protection.
+3. Run controlled multi-device encrypted round-trip tests with non-sensitive data.
+4. Add replica repair and failure-injection tests.
+5. Record LAN/TLS end-to-end latency and throughput separately from local in-memory benchmarks.
+6. Obtain an independent security review before considering sensitive use.
